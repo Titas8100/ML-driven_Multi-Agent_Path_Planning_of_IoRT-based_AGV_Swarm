@@ -1,0 +1,233 @@
+body {
+    margin: 0;
+    background-color: black;
+    color: #a4f3f2;
+    font-family: 'Orbitron', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+/* Apply Orbitron font to all elements */
+* {
+    font-family: 'Orbitron', sans-serif;
+}
+
+.container {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+}
+
+/* Control Panel */
+.panel_bg {
+    width: 20%;
+    background-color: #000000;
+    padding: 5px;
+    color: #a4f3f2;
+    text-shadow: 0px 0px 4px #12a0a0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    position: relative;
+    align-items: center;
+    /* Ensures center alignment */
+}
+
+/* Vertical Separator Between Control Panel & Grid */
+.panel_bg::after {
+    content: "";
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background-color: #12a0a0;
+    box-shadow: 0px 0px 10px #12a0a0;
+}
+
+/* Bot Control Styling */
+.bot-control {
+    background-color: #0A2129;
+    padding: 5px;
+    border: 1px solid rgb(97, 245, 245);
+    text-align: center;
+    margin-bottom: 2px;
+    flex: 1;
+    /* Distribute space evenly */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+/* Grid layout for buttons to ensure alignment */
+.button-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 5px;
+    align-items: center;
+    justify-items: center;
+}
+
+/* Left-side buttons */
+.left-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    align-items: center;
+    /* Ensures alignment */
+}
+
+/* Right-side buttons */
+.right-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    align-items: center;
+    /* Ensures alignment with left section */
+}
+
+/* Buttons & Select Dropdown */
+/* Neumorphic Buttons & Select */
+button,
+select {
+    padding: 8px;
+    /* Increased padding */
+    font-size: 12px;
+    width: 100px;
+
+    /* Neumorphic Base */
+    /* Neumorphic Base - Dark Cyan Theme */
+    background-color: #081818;
+    color: #a4f3f2;
+    /* Neumorphic Base - Dark Cyan Theme */
+    background-color: #081818;
+    color: #a4f3f2;
+    border: none;
+    /* Removed solid border */
+    border-radius: 8px;
+
+    /* The Magic Shadows: Cyan Tint Top-Left, Dark Black Bottom-Right */
+    box-shadow:
+        -2px -2px 4px rgba(95, 230, 230, 0.589),
+        3px 3px 6px rgba(0, 0, 0, 1.0),
+        inset 0 0 1px rgba(164, 243, 242, 0.05);
+
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+/* Hover State */
+button:hover,
+select:hover {
+    color: #fff;
+    background-color: #0a1f1f;
+    box-shadow:
+        -2px -2px 6px rgba(30, 80, 80, 0.5),
+        4px 4px 8px rgba(0, 0, 0, 1.0);
+}
+
+/* Active/Clicked State (Pressed In) */
+button:active {
+    box-shadow:
+        inset 2px 2px 5px rgba(0, 0, 0, 0.9),
+        inset -1px -1px 4px rgba(20, 60, 60, 0.3);
+    transform: translateY(1px);
+}
+
+/* Target Display Styling */
+.target-display {
+    border: 1px solid rgb(97, 245, 245);
+    padding: 5px;
+    text-align: center;
+    background-color: black;
+    color: #a4f3f2;
+    width: 100px;
+    /* Matches button width */
+    font-size: 12px;
+    /* Matches buttons */
+    box-shadow: 0px 0px 3px 1px #12a0a0;
+}
+
+/* Grid Section */
+.matrix-area {
+    width: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #000000;
+    padding: 20px;
+}
+
+/* Grid Styling */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    grid-template-rows: repeat(9, 1fr);
+    gap: 5px;
+    width: 90%;
+    height: 90%;
+    border: 3px solid #12a0a0;
+    box-shadow: 0px 0px 10px #12a0a0;
+}
+
+/* Individual Grid Cells */
+.gridcell {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #0A2129;
+    border: 1px solid #a4f3f2;
+    width: 100%;
+    height: 100%;
+    font-size: 16px;
+    color: #a4f3f2;
+    box-shadow: inset 0px 0px 4px #12a0a0;
+}
+
+/* Analysis Section */
+/* Analysis Section */
+/* Analysis Section */
+.analysis-section {
+    width: 30%;
+    background-color: #000000;
+    color: #a4f3f2;
+    padding: 20px;
+    position: relative;
+
+    /* Good CSS Styling */
+    border-left: 3px solid #12a0a0;
+    box-shadow: inset 5px 0px 10px -5px #12a0a0;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+
+    /* Text Wrapping & Scrolling */
+    word-break: break-all;
+    overflow-wrap: break-word;
+    text-align: left;
+    overflow-y: auto;
+    /* Scroll if too long */
+    max-height: 100vh;
+    /* Don't exceed screen */
+
+    /* Initial Text Shadow */
+    text-shadow: 0px 0px 2px #000;
+}
+
+/* Paragraph inside analysis to ensure block display */
+.analysis-section p {
+    margin: 0;
+    white-space: pre-wrap;
+    /* Respect new lines */
+}
+
+/* Remove the old separator pseudo-element if it conflicts, or update it */
+/* Using border-left on the container replaces the need for ::before separator mostly, 
+   but we can keep it for the 'glowing line' effect if desired. */
+.analysis-section::before {
+    content: none;
+    /* Removed in favor of border-left */
+}

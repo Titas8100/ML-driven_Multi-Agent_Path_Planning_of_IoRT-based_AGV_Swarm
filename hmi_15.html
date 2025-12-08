@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Updated HMI</title>
+    <link rel="stylesheet" href="hmi_15_css.css">
+    <link href="https://fonts.googleapis.com/css?family=Orbitron" rel="stylesheet"> 
+</head>
+<body>
+    <div class="container">
+        <!-- Control Panel -->
+        <div class="panel_bg">
+
+            <!-- Bot Control Sections -->
+            <div class="bot-control">
+                <h3>Bot 1</h3>
+                <div class="button-container">
+                    <div class="left-buttons">
+                        <select id="setValue1"></select>
+                        <button id="setBtn1">Set</button>
+                        <button id="stopBtn1">Stop</button>
+                        <button id="resetBtn1">Reset</button>
+                    </div>
+                    <div class="right-buttons">
+                        <div id="targetDisplay1" class="target-display">Target: 0</div>
+                        <div id="posBtn1" class="target-display">Position</div>
+                        <div id="runningBtn1" class="target-display">Running</div>
+                        <div id="interruptBtn1" class="target-display">Interrupt</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bot-control">
+                <h3>Bot 2</h3>
+                <div class="button-container">
+                    <div class="left-buttons">
+                        <select id="setValue2"></select>
+                        <button id="setBtn2">Set</button>
+                        <button id="stopBtn2">Stop</button>
+                        <button id="resetBtn2">Reset</button>
+                    </div>
+                    <div class="right-buttons">
+                        <div id="targetDisplay2" class="target-display">Target: 0</div>
+                        <div id="posBtn2" class="target-display">Position</div>
+                        <div id="runningBtn2" class="target-display">Running</div>
+                        <div id="interruptBtn2" class="target-display">Interrupt</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bot-control">
+                <h3>Bot 3</h3>
+                <div class="button-container">
+                    <div class="left-buttons">
+                        <select id="setValue3"></select>
+                        <button id="setBtn3">Set</button>
+                        <button id="stopBtn3">Stop</button>
+                        <button id="resetBtn3">Reset</button>
+                    </div>
+                    <div class="right-buttons">
+                        <div id="targetDisplay3" class="target-display">Target: 0</div>
+                        <div id="posBtn3" class="target-display">Position</div>
+                        <div id="runningBtn3" class="target-display">Running</div>
+                        <div id="interruptBtn3" class="target-display">Interrupt</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bot-control">
+                <h3>Bot 4</h3>
+                <div class="button-container">
+                    <div class="left-buttons">
+                        <select id="setValue4"></select>
+                        <button id="setBtn4">Set</button>
+                        <button id="stopBtn4">Stop</button>
+                        <button id="resetBtn4">Reset</button>
+                    </div>
+                    <div class="right-buttons">
+                        <div id="targetDisplay4" class="target-display">Target: 0</div>
+                        <div id="posBtn4" class="target-display">Position</div>
+                        <div id="runningBtn4" class="target-display">Running</div>
+                        <div id="interruptBtn4" class="target-display">Interrupt</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grid Section -->
+        <div class="matrix-area">
+            <div class="grid"></div>
+        </div>
+
+        <!-- Empty Analysis Section -->
+        <div class="analysis-section">
+            <p> </p>
+        </div>
+    </div>
+
+    <script src="hmi_15_script.js"></script> 
+
+</body>
+</html>
