@@ -2,8 +2,8 @@
 Developed a Simulator App for DQN-based coordinated path planning for an AGV Swarm 
 
 <p align="center">
-  <video src="swarm_hmi_sim_rec.mp4" width="600" controls>
-    Your browser does not support the video tag.
-  </video>
+  <a href="[https://www.youtube.com/watch?v=YOUR_VIDEO_ID](https://youtu.be/yY7uKPZqF8M?si=59pC2A13zGofAJWs)">
+    <img src="swarm_hmi_sim_ss.jpg" alt="Simulation Video" width="600"/>
+  </a>
 </p>
 
