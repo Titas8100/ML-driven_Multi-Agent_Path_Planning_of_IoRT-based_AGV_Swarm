@@ -1,0 +1,481 @@
+================================================================================
+          NEUROPATHFINDER: IOT + ML MULTI-AGENT NAVIGATION SYSTEM
+                 COMPREHENSIVE MODEL & SYSTEM ARCHITECTURE REPORT
+================================================================================
+
+TABLE OF CONTENTS:
+--------------------------------------------------------------------------------
+1. EXECUTIVE SUMMARY & PROJECT OVERVIEW
+2. END-TO-END SYSTEM ARCHITECTURE
+3. DEEP REINFORCEMENT LEARNING: THE PMR-DUELING DQN MODEL
+   3.1. Dueling Network Architecture (Value & Advantage Streams)
+   3.2. Double DQN (DDQN) Target Formulation
+   3.3. Prioritized Experience Replay (PER) & SumTree Implementation
+   3.4. Shared Brain Concept for Multi-Agent Coordination
+4. STATE SPACE, SENSOR MODEL & ACTION SPACE
+   4.1. 6-Dimensional Sensor State Representation
+   4.2. Action Space & Coordinate Mapping
+   4.3. Spatial Invariance and Generalization
+5. REWARD FUNCTION & ENVIRONMENT DYNAMICS
+   5.1. Reward Shaping Mechanics
+   5.2. Episode Lifecycle & Termination Conditions
+6. BACKEND INFERENCE ENGINE & PATH PLANNING (JS_DQN.PY)
+   6.1. REST API Interface
+   6.2. Two-Pass Safe Action Selection & Backtracking Algorithm
+7. FRONTEND HMI & MULTI-AGENT SWARM COORDINATION (HMI_15)
+   7.1. Neumorphic User Interface
+   7.2. Asynchronous Path Calculation Lock
+   7.3. Dynamic Future Path Reservation (Collision Avoidance Fix)
+8. IOT INTEGRATION & SWARM ROBOTICS BRIDGING
+9. COMPLETE FILE-BY-FILE CODEBREAKDOWN
+10. SYSTEM PARAMETERS & SPECIFICATIONS SUMMARY
+
+================================================================================
+1. EXECUTIVE SUMMARY & PROJECT OVERVIEW
+================================================================================
+NeuroPathfinder is an intelligent multi-agent grid navigation and path-planning
+platform designed for automated guided vehicles (AGVs) and swarm robotics. 
+
+The system solves the multi-agent pathfinding problem in a dynamic, obstacle-
+rich 9x9 grid environment by fusing:
+  - Deep Reinforcement Learning (PMR-Dueling Double DQN)
+  - Sensor-based ego-centric spatial perception
+  - Dynamic trajectory reservation for swarm collision avoidance
+  - A real-time Flask REST backend
+  - A Neumorphic Web-based Human-Machine Interface (HMI)
+
+Key Highlights:
+  - Multi-Agent Support: Coordinates up to 4 autonomous bots simultaneously.
+  - Collision-Free Navigation: Bots treat both static grid obstacles and other
+    active bots (including future planned paths) as physical obstacles.
+  - Sensor Abstraction: Uses 6 localized normalized sensor features rather than
+    raw full-grid matrices, allowing high scalability and spatial invariance.
+  - Centralized Learning, Decentralized Perception (Shared Brain): One shared
+    neural network controls all agents by ingesting individual agent sensor states.
+
+================================================================================
+2. END-TO-END SYSTEM ARCHITECTURE
+================================================================================
+
++-----------------------------------------------------------------------------+
+|                         HUMAN-MACHINE INTERFACE (HMI)                       |
+|       (hmi_15.html, hmi_15_css.css, hmi_15_script.js - Browser Client)      |
+|  - 4 Bot Control Panels (Set Target, Start, Stop, Reset, Status Indicators) |
+|  - Interactive 9x9 Grid with Real-Time Coordinate Display                   |
+|  - Swarm Coordinator: Mutex Lock & Future Path Reservation System           |
++-----------------------------------------------------------------------------+
+                                      |
+                     HTTP POST /predict_path (JSON)
+          Payload: { start: "11", goal: "99", obstacles: [[r, c], ...] }
+                                      v
++-----------------------------------------------------------------------------+
+|                        FLASK REST API (JS_DQN.py)                           |
+|  - Loads trained PyTorch weights ('pmr_dqn_model.pth')                     |
+|  - Receives coordinates and dynamic obstacle lists                          |
+|  - Executes iterative closed-loop trajectory simulation (`simulate_path`)    |
+|  - Performs 2-Pass Safe Action Filtering (Avoid Loops / Backtrack)          |
+|  - Returns formatted path string: "11.12.13.23..."                          |
++-----------------------------------------------------------------------------+
+                                      |
+                         Neural Network Forward Pass
+                                      v
++-----------------------------------------------------------------------------+
+|                   PMR-DUELING DOUBLE DQN (PMR_DQN.py)                       |
+|  - Input (6 floats): [DeltaX, DeltaY, ObsUp, ObsDown, ObsLeft, ObsRight]    |
+|  - Feature Extractor: 2x Linear(128) + ReLU                                 |
+|  - Dueling Streams:                                                         |
+|      * Value Stream V(s): Linear(128->128->1)                               |
+|      * Advantage Stream A(s, a): Linear(128->128->4)                        |
+|  - Aggregation: Q(s, a) = V(s) + [A(s, a) - mean(A(s, a))]                  |
++-----------------------------------------------------------------------------+
+                                      ^
+                                      | Trained via
++-----------------------------------------------------------------------------+
+|                    TRAINING ENGINE (train_pmr.py)                           |
+|  - 9x9 Grid Simulation with Random Obstacles (5-10) and 4 Bots              |
+|  - Prioritized Experience Replay Buffer (SumTree, capacity=50,000)          |
+|  - Double DQN Target Estimation to prevent Q-value overestimation           |
+|  - Shared Replay Buffer storing 4 bot transitions per simulation step       |
+|  - Adam Optimizer (lr=1e-4), Epsilon Decay (1.0 -> 0.05), Beta Annealing    |
++-----------------------------------------------------------------------------+
+
+================================================================================
+3. DEEP REINFORCEMENT LEARNING: THE PMR-DUELING DQN MODEL
+================================================================================
+
+The core artificial intelligence is built upon "PMR-DQN", which integrates
+three major breakthroughs in Deep Reinforcement Learning:
+
+--------------------------------------------------------------------------------
+3.1. Dueling Network Architecture (Value & Advantage Streams)
+--------------------------------------------------------------------------------
+Standard DQNs estimate the action-value function Q(s, a) directly through a 
+single output layer. In many states, the action chosen has negligible impact
+on safety or progress, making it unnecessary to learn individual action values.
+
+The Dueling DQN decouples Q(s, a) into two distinct streams:
+  1. State-Value Stream V(s): A scalar representing how good it is to be in 
+     state s, independent of action.
+  2. Advantage Stream A(s, a): A vector of length 4 assessing the relative 
+     importance/quality of each action compared to the average action in state s.
+
+Mathematical Formulation:
+  Q(s, a; theta, alpha, beta) = V(s; theta, beta) + 
+      ( A(s, a; theta, alpha) - (1 / |A|) * SUM_{a'} A(s, a'; theta, alpha) )
+
+  Where:
+    - theta: Parameters of the shared feature layer (2 layers of 128 neurons)
+    - beta: Parameters of the Value Stream (128 -> 128 -> 1)
+    - alpha: Parameters of the Advantage Stream (128 -> 128 -> 4)
+    - (1 / |A|) * SUM_{a'} A(s, a'): The mean advantage subtracted from each 
+      advantage term to enforce identifiability (ensuring V(s) approximates the 
+      true state value and stabilizes gradient backpropagation).
+
+--------------------------------------------------------------------------------
+3.2. Double DQN (DDQN) Target Formulation
+--------------------------------------------------------------------------------
+Standard DQN suffers from maximization bias because it uses the same max 
+operator to both select and evaluate an action:
+  Y_DQN = r + gamma * max_a' Q(s', a'; theta_target)
+
+Double DQN resolves this by decoupling the action selection from evaluation:
+  1. Action Selection: Uses the online Policy Network theta_policy:
+       a* = argmax_{a'} Q(s', a'; theta_policy)
+  2. Action Evaluation: Evaluates the chosen action using the Target Network:
+       Y_DDQN = r + gamma * Q(s', a*; theta_target) * (1 - done)
+
+Target Network Synchronization:
+  - The Target Network parameters are synchronized with the Policy Network
+    every 10 episodes (`target_net.load_state_dict(policy_net.state_dict())`),
+    preventing non-stationary target oscillations.
+
+--------------------------------------------------------------------------------
+3.3. Prioritized Experience Replay (PER) & SumTree Implementation
+--------------------------------------------------------------------------------
+Uniform random sampling of replay memories is inefficient because transitions
+with high unexpected error (high learning potential) are sampled with the same
+frequency as well-mastered states.
+
+PER Structure in PMR_DQN.py:
+  1. Binary SumTree:
+     - Implemented with capacity = 50,000 leaf entries (tree array size: 2N - 1).
+     - Internal nodes store the sum of their child nodes' priorities.
+     - Allows O(log N) priority updates and O(log N) stratified sampling.
+  2. Priority Calculation:
+     - Priority p_i = (|delta_i| + epsilon)^alpha
+     - delta_i = Y_i - Q(s_i, a_i; theta_policy) (TD error)
+     - alpha = 0.6 (controls degree of prioritization; 0 = uniform, 1 = greedy)
+     - epsilon = 1e-5 (prevents transitions with zero TD-error from starving)
+  3. Importance Sampling (IS) Weights:
+     - Prioritized sampling introduces bias in expected values. IS weights
+       correct for this bias:
+         w_i = (N * P(i))^(-beta) / max_j(w_j)
+     - P(i) = p_i / SUM_k(p_k)
+     - beta is annealed linearly from 0.4 up to 1.0 (beta = min(1.0, beta + 0.001)),
+       ensuring full bias correction as learning converges.
+  4. Weighted Loss Function:
+     - Loss = mean( w_i * (Y_i - Q(s_i, a_i))^2 )
+
+--------------------------------------------------------------------------------
+3.4. Shared Brain Concept for Multi-Agent Coordination
+--------------------------------------------------------------------------------
+Instead of instantiating 4 separate neural networks for 4 bots:
+  - A single policy network acts as a "Shared Brain".
+  - At each simulation step, all 4 bots independently query the model using their
+    individual 6-element local sensor states.
+  - All 4 transitions `(s_i, a_i, r_i, s'_i, done)` are pushed to the shared
+    replay buffer per step, multiplying sample efficiency by 4x.
+  - Bots learn homogenous navigation and avoidance behavior without needing
+    individual network tuning.
+
+================================================================================
+4. STATE SPACE, SENSOR MODEL & ACTION SPACE
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1. 6-Dimensional Sensor State Representation
+--------------------------------------------------------------------------------
+Rather than inputting full 9x9 grid matrices or 81-dimensional one-hot vectors,
+the model utilizes an ego-centric 6-element vector:
+
+  State Vector: S = [ DeltaX, DeltaY, ObsUp, ObsDown, ObsLeft, ObsRight ]
+
+  Element Details:
+  1. DeltaX = (Goal_Row - Bot_Row) / GRID_SIZE
+     - Normalized vertical displacement from bot to its assigned goal.
+     - Range: [-1.0, +1.0]
+  2. DeltaY = (Goal_Col - Bot_Col) / GRID_SIZE
+     - Normalized horizontal displacement from bot to its assigned goal.
+     - Range: [-1.0, +1.0]
+  3. ObsUp (Direction [-1, 0]):
+     - 1.0 if the cell above is out of bounds, contains a static obstacle, 
+       or contains another bot; 0.0 if free.
+  4. ObsDown (Direction [+1, 0]):
+     - 1.0 if the cell below is blocked; 0.0 if free.
+  5. ObsLeft (Direction [0, -1]):
+     - 1.0 if the cell to the left is blocked; 0.0 if free.
+  6. ObsRight (Direction [0, +1]):
+     - 1.0 if the cell to the right is blocked; 0.0 if free.
+
+--------------------------------------------------------------------------------
+4.2. Action Space & Coordinate Mapping
+--------------------------------------------------------------------------------
+Discrete Action Space: |A| = 4
+  - Action 0: Up    (Delta Row = -1, Delta Col =  0)
+  - Action 1: Down  (Delta Row = +1, Delta Col =  0)
+  - Action 2: Left  (Delta Row =  0, Delta Col = -1)
+  - Action 3: Right (Delta Row =  0, Delta Col = +1)
+
+Coordinate Convention:
+  - Internal Model & Backend: 0-indexed coordinates (Row 0-8, Col 0-8).
+  - Frontend HMI Representation: 1-indexed two-digit strings ("11" to "99").
+  - Conversion: (Row 0, Col 0) -> "11", (Row 8, Col 8) -> "99".
+
+--------------------------------------------------------------------------------
+4.3. Spatial Invariance and Generalization
+--------------------------------------------------------------------------------
+By using relative goal displacement (DeltaX, DeltaY) and localized 4-way 
+proximity sensors, the state space is invariant to absolute grid position:
+  - A bot at (2, 2) moving toward (4, 4) with an obstacle on its right 
+    generates the exact same state as a bot at (6, 6) moving toward (8, 8) 
+    with an obstacle on its right.
+  - This allows the model to generalize instantly to arbitrary start/goal 
+    pairs and random obstacle configurations without requiring millions of 
+    combinatorial state visits.
+
+================================================================================
+5. REWARD FUNCTION & ENVIRONMENT DYNAMICS
+================================================================================
+
+The reward function in `train_pmr.py` is engineered with potential-based reward
+shaping to guide exploration while strongly penalizing collisions and delays.
+
+--------------------------------------------------------------------------------
+5.1. Reward Shaping Mechanics
+--------------------------------------------------------------------------------
+Let D_prev = |bx_prev - gx| + |by_prev - gy| (Manhattan distance before step)
+Let D_curr = |bx_curr - gx| + |by_curr - gy| (Manhattan distance after step)
+
+Reward Components per Bot i:
+  1. Distance Improvement (Progress Reward):
+     - If D_curr < D_prev: R_i += +0.2 (Bot moved closer to goal)
+     - If D_curr > D_prev: R_i -= +0.2 (Bot moved further from goal)
+  2. Obstacle / Wall Collision Penalty:
+     - If the proposed move hits a grid boundary or static obstacle:
+       R_i -= 0.5 (Bot position remains unchanged)
+  3. Bot-to-Bot Swarm Crash Penalty:
+     - If two or more bots occupy the same cell in the new step:
+       All bots receive R = -2.0, and the episode terminates immediately (`done = True`).
+  4. Step Penalty (Efficiency Pressure):
+     - In every step where the bot has not reached the goal:
+       R_i -= 0.05 (Encourages finding the shortest path without wandering)
+  5. Goal Reached Reward:
+     - When bx_curr == gx and by_curr == gy:
+       R_i += +10.0 (Terminal success reward)
+
+--------------------------------------------------------------------------------
+5.2. Episode Lifecycle & Termination Conditions
+--------------------------------------------------------------------------------
+An episode ends (`done = True`) if:
+  - All 4 bots reach their respective goals (Full Success).
+  - Any two bots collide (Crash Termination).
+  - Maximum episode steps (50 steps) is reached (Timeout Truncation).
+
+================================================================================
+6. BACKEND INFERENCE ENGINE & PATH PLANNING (JS_DQN.PY)
+================================================================================
+
+The Flask server (`JS_DQN.py`) serves as the production inference bridge between
+the PyTorch model and the frontend client.
+
+--------------------------------------------------------------------------------
+6.1. REST API Interface
+--------------------------------------------------------------------------------
+- Endpoint: POST `http://localhost:5000/predict_path`
+- Request Payload Format:
+  {
+    "start": "11",
+    "goal": "99",
+    "obstacles": [[1, 2], [5, 6], [7, 8]]  // 1-indexed obstacle rows and cols
+  }
+- Response Payload Format:
+  {
+    "path": "11.12.13.23.33.43.53.63.73.83.84.85.86.87.88.89.99"
+  }
+
+--------------------------------------------------------------------------------
+6.2. Two-Pass Safe Action Selection & Backtracking Algorithm
+--------------------------------------------------------------------------------
+During simulation (`simulate_path`), the model does not just blindly take 
+argmax(Q). Instead, it implements a robust multi-pass action filter:
+
+Step-by-step Execution:
+  1. State Construction: Builds the 6-element sensor vector with respect to
+     the goal, grid walls, and dynamic obstacles (other bots).
+  2. Model Evaluation: Computes Q-values for all 4 actions and ranks them in 
+     descending order: `sorted_actions = torch.argsort(q_values[0], descending=True)`.
+  3. Pass 1 (Unvisited Safe Move):
+     - Iterates through `sorted_actions`.
+     - Checks if the move is in-bounds, not in the obstacle list, and NOT 
+       in the `visited` set (unless it is the goal).
+     - Selects the first valid unvisited action.
+  4. Pass 2 (Backtracking / Safe Escape):
+     - If all 4 actions lead to visited cells (e.g. dead ends or cul-de-sacs),
+       Pass 2 iterates through `sorted_actions` again and permits moving to a
+       visited cell as long as it does not crash into a wall or obstacle.
+  5. Loop Prevention: Tracks the `visited` set to ensure paths terminate cleanly 
+     within `max_steps = 50`.
+  6. Output Formatting: Combines the visited cell sequence into a dot-separated
+     string of 1-indexed cell codes ("RowCol").
+
+================================================================================
+7. FRONTEND HMI & MULTI-AGENT SWARM COORDINATION (HMI_15)
+================================================================================
+
+--------------------------------------------------------------------------------
+7.1. Neumorphic User Interface
+--------------------------------------------------------------------------------
+The frontend interface (`hmi_15.html`, `hmi_15_css.css`) provides a futuristic
+Dark Cyan Neumorphic command dashboard:
+  - Left Panel: Individual control blocks for Bot 1 (Red #ff3e3e), Bot 2 (Purple #c25ced),
+    Bot 3 (Yellow #ffff00), and Bot 4 (Lime #00ff00).
+  - Controls: Target dropdown selector (11 to 99), Set, Stop, Reset buttons.
+  - Indicators: Real-time Target Display, Current Position, Running state, Interrupt.
+  - Central 9x9 Grid: Visual display of active bot markers (B-1, B-2, B-3, B-4).
+  - Right Panel: Real-time analysis log outputting generated step-by-step paths.
+
+--------------------------------------------------------------------------------
+7.2. Asynchronous Path Calculation Lock
+--------------------------------------------------------------------------------
+To prevent race conditions when multiple bots are triggered simultaneously:
+  - A global mutex lock `isCalculatingPath` serializes requests.
+  - When Bot A begins path planning, subsequent bots wait in an async loop:
+      `while (isCalculatingPath) { await new Promise(r => setTimeout(r, 100)); }`
+  - Once Bot A receives its path and registers its future trajectory, the lock 
+    is released for Bot B.
+
+--------------------------------------------------------------------------------
+7.3. Dynamic Future Path Reservation (Collision Avoidance Fix)
+--------------------------------------------------------------------------------
+Multi-agent swarms face deadlock or collisions if path planning only considers
+the current static positions of other agents.
+
+NeuroPathfinder implements a Dynamic Future Path Reservation system:
+  1. Trajectory Aggregation:
+     When Bot A plans a path, `obstacles` array includes:
+       - Current position of all other bots (`botStates[id].positionValue`).
+       - **Every future step in the active trajectory of other running bots**
+         (`botStates[id].path`).
+  2. Dynamic Reservation Clearance:
+     As Bot B moves across the grid (at 500ms intervals per step):
+       - It executes `remainingPath.shift()`.
+       - The newly freed cell is removed from Bot B's reservation list, allowing
+         Bot A to move into that cell behind Bot B safely without stalling.
+
+================================================================================
+8. IOT INTEGRATION & SWARM ROBOTICS BRIDGING
+================================================================================
+
+While demonstrated in a browser-based simulation, the NeuroPathfinder architecture
+is structured directly for physical IoT hardware deployment:
+
+Edge / Hardware Interfacing Workflow:
+  1. Physical AGV Nodes:
+     - Small differential-drive bots equipped with ESP32 or Raspberry Pi Pico W.
+     - Onboard infrared/ultrasonic/ToF proximity sensors mapping to the 4 obstacle
+       flags (`ObsUp, ObsDown, ObsLeft, ObsRight`).
+     - Real-time localization via wheel encoders, indoor optical tracking (overhead
+       camera / ArUco markers), or UWB (Ultra-Wideband) positioning.
+  2. Communication Bridge:
+     - Hardware nodes communicate with the central Flask server over Wi-Fi
+       via MQTT or WebSockets.
+  3. Centralized AI Coordinator:
+     - The central server receives physical bot positions, queries the PMR-DQN model,
+       and sends structured waypoint sequences (`[Cell_1, Cell_2, ...]`) back to
+       the ESP32 microcontrollers.
+  4. Closed-Loop Execution:
+     - ESP32 motor drivers (e.g., L298N / TB6612FNG) execute PID motion control
+       to navigate from cell center to cell center, sending completion ACKs to
+       advance the path reservation window.
+
+================================================================================
+9. COMPLETE FILE-BY-FILE CODE BREAKDOWN
+================================================================================
+
+File: models/PMR_DQN.py
+  - Lines 9-59: `SumTree` class. Binary tree storing prioritized transition weights.
+  - Lines 63-121: `PrioritizedReplayBuffer` class. Handles adding experiences with
+    maximum priority, stratified proportional sampling with Importance Sampling
+    weights, and updating TD-error priorities.
+  - Lines 125-158: `DuelingDQN(nn.Module)` class. Neural network implementing the
+    shared feature backbone, Value Stream V(s), Advantage Stream A(s, a), and the
+    mean-subtracted dueling aggregation layer.
+
+File: models/train_pmr.py
+  - Lines 8-15: Hyperparameters (GRID_SIZE=9, NUM_BOTS=4, STATE_SIZE=6, ACTION_SIZE=4).
+  - Lines 18-164: `GridEnvironment` class. Simulates 9x9 multi-bot grid, random
+    obstacle placement, ego-centric 6-element sensor calculation, distance-based
+    reward shaping, and collision checking.
+  - Lines 166-279: `train()` function. Implements the complete training loop:
+    Policy/Target net creation, Adam optimizer, PER sampling, Double DQN loss
+    calculation, backpropagation, epsilon exploration decay, beta annealing,
+    periodic target network synchronization, and saving weights to `pmr_dqn_model.pth`.
+
+File: models/JS_DQN.py
+  - Lines 1-30: Flask initialization, CORS setup, model loading from `pmr_dqn_model.pth`.
+  - Lines 31-153: `simulate_path(start, goal, dynamic_obstacles, max_steps)` function.
+    Executes iterative neural inference with 2-pass safe action selection and
+    cycle-breaking backtracking.
+  - Lines 155-197: `/predict_path` POST endpoint. Parses coordinate strings and
+    dynamic obstacle lists, coordinates simulation, and returns JSON path.
+
+File: hmi_15.html
+  - HTML structure containing control sections for Bots 1-4, central matrix-area
+    container for the 9x9 grid, and analysis sidebar for path logging.
+
+File: hmi_15_css.css
+  - Neumorphic styling with Orbitron font, dark cyan backgrounds (#000000, #081818, #0A2129),
+    cyan borders and glow effects (#12a0a0, #a4f3f2), responsive CSS grid for matrix.
+
+File: hmi_15_script.js
+  - Grid cell rendering (11 to 99), event listeners for Set/Stop/Reset buttons,
+    asynchronous mutex lock `isCalculatingPath`, multi-agent dynamic path reservation,
+    and step-by-step bot animation.
+
+File: models/requirements.txt
+  - Python dependencies: `numpy`, `torch`, `flask`, `flask-cors`.
+
+File: models/setup_env.bat
+  - Windows batch script automating virtual environment creation and pip dependency installation.
+
+================================================================================
+10. SYSTEM PARAMETERS & SPECIFICATIONS SUMMARY
+================================================================================
+
+Parameter                         | Value / Configuration
+----------------------------------+---------------------------------------------
+Grid Dimensions                   | 9 x 9 (81 Cells, indexed 11 to 99 in UI)
+Number of Active Bots             | 4 Bots (Default positions: 11, 19, 91, 99)
+Model Input State Size            | 6 Floats [DeltaX, DeltaY, U, D, L, R]
+Action Space                      | 4 Discrete Directions (Up, Down, Left, Right)
+Hidden Layer Architecture         | 2x Linear(128) + ReLU Shared Layers
+Value Stream Architecture         | Linear(128) -> ReLU -> Linear(1)
+Advantage Stream Architecture     | Linear(128) -> ReLU -> Linear(4)
+Q-Value Combination               | Q(s,a) = V(s) + (A(s,a) - mean(A(s,:)))
+Experience Replay Type            | Prioritized Experience Replay (SumTree)
+Replay Buffer Capacity            | 50,000 Transitions
+PER Priority Exponent (alpha)     | 0.6
+PER Small Constant (epsilon)      | 1e-5
+Importance Sampling (beta)        | Annealed from 0.4 to 1.0 (+0.001 / episode)
+Target Network Update Interval    | Every 10 Episodes (Hard Copy)
+Optimizer                         | Adam (Learning Rate = 1e-4)
+Discount Factor (gamma)           | 0.99
+Epsilon Exploration Schedule      | 1.0 -> 0.05 (Decay Rate = 0.995 / episode)
+Training Batch Size               | 64 Transitions
+Training Episodes                 | 1,000 Episodes (Shared Replay: 4 transitions/step)
+Max Steps per Episode/Simulation  | 50 Steps
+Backend Web Server                | Flask on Python (Port 5000) with Flask-CORS
+Frontend Framework                | Vanilla ES6 JavaScript, HTML5, Neumorphic CSS3
+================================================================================
+                              END OF REPORT
+================================================================================

@@ -1,3 +1,9 @@
+import sys
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 import numpy as np
 import random
 import torch
@@ -14,25 +20,24 @@ STATE_SIZE = 6 # [DeltaX, DeltaY, ObsUp, ObsDown, ObsLeft, ObsRight]
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
-# === Enhanced Environment ===
+# === Enhanced Multi-Agent Environment with Turn Minimization & Traffic Contention ===
 class GridEnvironment:
     def __init__(self):
         self.grid_size = GRID_SIZE
         self.num_bots = NUM_BOTS
+        self.prev_actions = [-1] * self.num_bots
         self.reset()
 
     def reset(self):
-        # 1. Initialize empty grid (logic only)
-        # 2. Add Random Obstacles (e.g., 5-10 obstacles)
         self.obstacles = []
-        num_obstacles = random.randint(5, 10)
+        num_obstacles = random.randint(5, 12)
         for _ in range(num_obstacles):
             pos = (random.randint(0, self.grid_size-1), random.randint(0, self.grid_size-1))
             self.obstacles.append(pos)
         
-        # 3. Initialize Bots and Goals
         self.bots = []
         self.goals = []
+        self.prev_actions = [-1] * self.num_bots
         
         for i in range(self.num_bots):
             while True:
@@ -40,31 +45,35 @@ class GridEnvironment:
                 if start not in self.obstacles and start not in self.bots:
                     self.bots.append(start)
                     break
-            while True:
-                goal = (random.randint(0, self.grid_size-1), random.randint(0, self.grid_size-1))
-                if goal not in self.obstacles and goal != start and goal not in self.goals:
-                    self.goals.append(goal)
-                    break
+        
+        # 40% chance of high-contention shared bottleneck / convergent destinations
+        is_contention = random.random() < 0.4
+        shared_goal = (random.randint(0, self.grid_size-1), random.randint(0, self.grid_size-1))
+        while shared_goal in self.obstacles or shared_goal in self.bots:
+            shared_goal = (random.randint(0, self.grid_size-1), random.randint(0, self.grid_size-1))
+
+        for i in range(self.num_bots):
+            if is_contention and i < 2:
+                self.goals.append(shared_goal)
+            else:
+                while True:
+                    goal = (random.randint(0, self.grid_size-1), random.randint(0, self.grid_size-1))
+                    if goal not in self.obstacles and goal != self.bots[i]:
+                        self.goals.append(goal)
+                        break
         
         return self.get_state()
 
     def get_state(self, agent_idx=None):
-        # Sensor-Based State (6 values)
-        # Returns Normalized Vector:
-        # [DeltaX, DeltaY, BlockUp, BlockDown, BlockLeft, BlockRight]
-        
         if agent_idx is None:
             return np.array([self.get_state(i) for i in range(self.num_bots)])
             
         bx, by = self.bots[agent_idx]
         gx, gy = self.goals[agent_idx]
         
-        # 1. Delta to Goal (Normalized by Grid Size)
         delta_x = (gx - bx) / self.grid_size
         delta_y = (gy - by) / self.grid_size
         
-        # 2. Proximity Sensors (1.0 if blocked, 0.0 if free)
-        # Directions: Up(-1,0), Down(1,0), Left(0,-1), Right(0,1) matches Action Index 0,1,2,3
         sensors = []
         directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
         
@@ -91,7 +100,6 @@ class GridEnvironment:
                 sensors.append(1.0)
                 continue
                 
-            # If free
             sensors.append(0.0)
             
         state = np.array([delta_x, delta_y] + sensors, dtype=np.float32)
@@ -101,7 +109,6 @@ class GridEnvironment:
         rewards = [0.0] * self.num_bots
         new_positions = list(self.bots)
         
-        # Calculate distances BEFORE move
         prev_dists = []
         for i in range(self.num_bots):
             bx, by = self.bots[i]
@@ -109,32 +116,33 @@ class GridEnvironment:
             prev_dists.append(abs(bx - gx) + abs(by - gy))
         
         done = False
+        deltas = [(-1, 0), (1, 0), (0, -1), (0, 1)]
         
         for i, action in enumerate(actions):
             x, y = self.bots[i]
-            
-            # Apply Action
-            dx, dy = 0, 0
-            if action == 0: dx, dy = -1, 0 # Up
-            elif action == 1: dx, dy = 1, 0 # Down
-            elif action == 2: dx, dy = 0, -1 # Left
-            elif action == 3: dx, dy = 0, 1 # Right
-            
+            dx, dy = deltas[action]
             nx, ny = x + dx, y + dy
             
             # Boundary Check
             if 0 <= nx < self.grid_size and 0 <= ny < self.grid_size:
-                # Obstacle Check
                 if (nx, ny) not in self.obstacles:
-                     new_positions[i] = (nx, ny)
+                    new_positions[i] = (nx, ny)
                 else:
-                    rewards[i] -= 0.5 # Hit obstacle (reduced penalty to encourage exploring near it)
+                    rewards[i] -= 0.5
             else:
-                 rewards[i] -= 0.5 # Hit wall
+                rewards[i] -= 0.5
+
+            # Turn Penalty / Straight-Line Momentum (Least Turns Optimization)
+            if self.prev_actions[i] != -1:
+                if action != self.prev_actions[i]:
+                    rewards[i] -= 0.1  # Turn penalty
+                else:
+                    rewards[i] += 0.05 # Straight-line momentum bonus
+            self.prev_actions[i] = action
 
         # Collision between bots
         if len(set(new_positions)) < len(new_positions):
-            return self.get_state(), [-2.0]*self.num_bots, True # Crash
+            return self.get_state(), [-3.0]*self.num_bots, True # Crash penalty
             
         self.bots = new_positions
         
@@ -145,17 +153,16 @@ class GridEnvironment:
             gx, gy = self.goals[i]
             curr_dist = abs(bx - gx) + abs(by - gy)
             
-            # Reward Shaping: Reward for getting closer
             if curr_dist < prev_dists[i]:
-                rewards[i] += 0.2 # Improving
+                rewards[i] += 0.3 # Moving closer
             elif curr_dist > prev_dists[i]:
-                rewards[i] -= 0.2 # Worsening
+                rewards[i] -= 0.3 # Moving away
             
             if self.bots[i] == self.goals[i]:
-                rewards[i] += 10.0 # Goal!
+                rewards[i] += 12.0 # Goal Reached!
                 completed += 1
             else:
-                rewards[i] -= 0.05 # Small step penalty
+                rewards[i] -= 0.05
                 
         if completed == self.num_bots:
             done = True
@@ -166,8 +173,6 @@ class GridEnvironment:
 def train():
     env = GridEnvironment()
     
-    # SHARE BRAIN: Input=State(81), Output=Action(4). 
-    # We treat each bot's experience as a sample.
     policy_net = DuelingDQN(STATE_SIZE, ACTION_SIZE).to(device) 
     target_net = DuelingDQN(STATE_SIZE, ACTION_SIZE).to(device)
     target_net.load_state_dict(policy_net.state_dict())
@@ -177,32 +182,28 @@ def train():
     replay_buffer = PrioritizedReplayBuffer(capacity=50000)
     
     epsilon = 1.0
-    epsilon_decay = 0.995
+    epsilon_decay = 0.992
     epsilon_min = 0.05
     beta = 0.4
     
     batch_size = 64
-    episodes = 1000 
+    episodes = 500
     
-    print("🚀 Starting PMR-Dueling DQN Training (Shared Brain)...")
+    print("🚀 Starting PMR-Dueling DQN Training with Turn Optimization & Swarm Contention...")
     
     for episode in range(episodes):
-        states = env.reset() # Returns (4, 81)
+        states = env.reset()
         total_reward = 0
         done = False
         step_count = 0
         
         while not done and step_count < 50:
             step_count += 1
-            
-            # Select Actions for all 4 bots
             actions = []
-            
-            # We can batch predict for all 4 bots at once!
-            states_tensor = torch.FloatTensor(states).to(device) # (4, 81)
+            states_tensor = torch.FloatTensor(states).to(device)
             
             with torch.no_grad():
-                q_values = policy_net(states_tensor) # (4, 4)
+                q_values = policy_net(states_tensor)
             
             for i in range(NUM_BOTS):
                 if random.random() < epsilon:
@@ -210,20 +211,15 @@ def train():
                 else:
                     actions.append(torch.argmax(q_values[i]).item())
             
-            # Step Environment
             next_states, rewards, done = env.step(actions)
             
-            # Store Transitions - Treat each bot as an individual experience
-            # We add 4 transitions to buffer per step
             for i in range(NUM_BOTS):
-                 replay_buffer.add(states[i], actions[i], rewards[i], next_states[i], done)
-                 total_reward += rewards[i]
+                replay_buffer.add(states[i], actions[i], rewards[i], next_states[i], done)
+                total_reward += rewards[i]
             
             states = next_states
             
-            # Learn
             if replay_buffer.tree.n_entries > batch_size:
-                # Sample batch of mixed bot experiences
                 b_states, b_actions, b_rewards, b_next_states, b_dones, idxs, is_weights = replay_buffer.sample(batch_size, beta)
                 
                 if b_states is not None:
@@ -234,11 +230,9 @@ def train():
                     dones_t = torch.FloatTensor(b_dones).unsqueeze(1).to(device)
                     weights_t = torch.FloatTensor(is_weights).unsqueeze(1).to(device)
                     
-                    # Current Q
                     q_vals = policy_net(states_t)
                     q_curr = q_vals.gather(1, actions_t)
                     
-                    # Double DQN Target
                     with torch.no_grad():
                         next_q_policy = policy_net(next_states_t)
                         best_actions = next_q_policy.argmax(1).unsqueeze(1)
@@ -247,8 +241,6 @@ def train():
                         target_vals = next_q_target.gather(1, best_actions)
                         
                     y = rewards_t + (0.99 * target_vals * (1 - dones_t))
-                    
-                    # Loss
                     diff = y - q_curr
                     loss = (diff.pow(2) * weights_t).mean()
                     
@@ -256,15 +248,12 @@ def train():
                     loss.backward()
                     optimizer.step()
                     
-                    # Update Priorities
                     errors = torch.abs(diff).detach().cpu().numpy().flatten()
                     replay_buffer.update_priorities(idxs, errors)
 
-        # Update Target Network
         if episode % 10 == 0:
             target_net.load_state_dict(policy_net.state_dict())
             
-        # Update Hypers
         epsilon = max(epsilon_min, epsilon * epsilon_decay)
         beta = min(1.0, beta + 0.001)
         
