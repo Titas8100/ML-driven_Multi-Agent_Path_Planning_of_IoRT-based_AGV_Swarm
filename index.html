@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NeuroPathfinder - ML-driven Multi-Agent AGV Swarm</title>
+    <link rel="stylesheet" href="hmi_15_css.css?v=19">
+    <link href="https://fonts.googleapis.com/css?family=Orbitron" rel="stylesheet">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Control Panel (Left Section) -->
+        <div class="panel_bg">
+
+            <!-- Bot 1 Control -->
+            <div class="bot-control">
+                <h3>Bot 1</h3>
+                <div class="button-container">
+                    <div class="left-buttons">
+                        <!-- 9x9 Matrix Target Selector Menu -->
+                        <div class="matrix-selector-container">
+                            <button type="button" class="matrix-menu-btn" id="matrixMenuBtn1" title="Select Target from 9x9 Matrix">
+                                <span class="matrix-btn-label">TGT:</span>
+                                <span class="matrix-val" id="matrixVal1">15</span>
+                            </button>
+                            <input type="hidden" id="setValue1" value="15">
+                            <div class="matrix-dropdown" id="matrixDropdown1">
+                                <div class="matrix-dropdown-title">TARGET MATRIX (9x9)</div>
+                                <div class="matrix-grid-picker" id="matrixPicker1"></div>
+                            </div>
+                        </div>
+                        <button id="setBtn1">Set</button>
+                        <button id="stopBtn1">Stop</button>
+                        <button id="resetBtn1">Reset</button>
+                    </div>
+                    <div class="right-buttons">
+                        <div id="targetDisplay1" class="target-display">Target: 0</div>
+                        <div id="posBtn1" class="target-display">Position: 11</div>
+                        <div id="runningBtn1" class="target-display">Idle</div>
+                        <div id="interruptBtn1" class="target-display">Normal</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bot 2 Control -->
+            <div class="bot-control">
+                <h3>Bot 2</h3>
+                <div class="button-container">
+                    <div class="left-buttons">
+                        <!-- 9x9 Matrix Target Selector Menu -->
+                        <div class="matrix-selector-container">
+                            <button type="button" class="matrix-menu-btn" id="matrixMenuBtn2" title="Select Target from 9x9 Matrix">
+                                <span class="matrix-btn-label">TGT:</span>
+                                <span class="matrix-val" id="matrixVal2">15</span>
+                            </button>
+                            <input type="hidden" id="setValue2" value="15">
+                            <div class="matrix-dropdown" id="matrixDropdown2">
+                                <div class="matrix-dropdown-title">TARGET MATRIX (9x9)</div>
+                                <div class="matrix-grid-picker" id="matrixPicker2"></div>
+                            </div>
+                        </div>
+                        <button id="setBtn2">Set</button>
+                        <button id="stopBtn2">Stop</button>
+                        <button id="resetBtn2">Reset</button>
+                    </div>
+                    <div class="right-buttons">
+                        <div id="targetDisplay2" class="target-display">Target: 0</div>
+                        <div id="posBtn2" class="target-display">Position: 19</div>
+                        <div id="runningBtn2" class="target-display">Idle</div>
+                        <div id="interruptBtn2" class="target-display">Normal</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bot 3 Control -->
+            <div class="bot-control">
+                <h3>Bot 3</h3>
+                <div class="button-container">
+                    <div class="left-buttons">
+                        <!-- 9x9 Matrix Target Selector Menu -->
+                        <div class="matrix-selector-container">
+                            <button type="button" class="matrix-menu-btn" id="matrixMenuBtn3" title="Select Target from 9x9 Matrix">
+                                <span class="matrix-btn-label">TGT:</span>
+                                <span class="matrix-val" id="matrixVal3">15</span>
+                            </button>
+                            <input type="hidden" id="setValue3" value="15">
+                            <div class="matrix-dropdown" id="matrixDropdown3">
+                                <div class="matrix-dropdown-title">TARGET MATRIX (9x9)</div>
+                                <div class="matrix-grid-picker" id="matrixPicker3"></div>
+                            </div>
+                        </div>
+                        <button id="setBtn3">Set</button>
+                        <button id="stopBtn3">Stop</button>
+                        <button id="resetBtn3">Reset</button>
+                    </div>
+                    <div class="right-buttons">
+                        <div id="targetDisplay3" class="target-display">Target: 0</div>
+                        <div id="posBtn3" class="target-display">Position: 91</div>
+                        <div id="runningBtn3" class="target-display">Idle</div>
+                        <div id="interruptBtn3" class="target-display">Normal</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bot 4 Control -->
+            <div class="bot-control">
+                <h3>Bot 4</h3>
+                <div class="button-container">
+                    <div class="left-buttons">
+                        <!-- 9x9 Matrix Target Selector Menu -->
+                        <div class="matrix-selector-container">
+                            <button type="button" class="matrix-menu-btn" id="matrixMenuBtn4" title="Select Target from 9x9 Matrix">
+                                <span class="matrix-btn-label">TGT:</span>
+                                <span class="matrix-val" id="matrixVal4">15</span>
+                            </button>
+                            <input type="hidden" id="setValue4" value="15">
+                            <div class="matrix-dropdown" id="matrixDropdown4">
+                                <div class="matrix-dropdown-title">TARGET MATRIX (9x9)</div>
+                                <div class="matrix-grid-picker" id="matrixPicker4"></div>
+                            </div>
+                        </div>
+                        <button id="setBtn4">Set</button>
+                        <button id="stopBtn4">Stop</button>
+                        <button id="resetBtn4">Reset</button>
+                    </div>
+                    <div class="right-buttons">
+                        <div id="targetDisplay4" class="target-display">Target: 0</div>
+                        <div id="posBtn4" class="target-display">Position: 99</div>
+                        <div id="runningBtn4" class="target-display">Idle</div>
+                        <div id="interruptBtn4" class="target-display">Normal</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grid Section (Center Section) -->
+        <div class="matrix-area">
+            <div class="scifi-header">
+                <span id="typing-text"></span><span class="typing-cursor">_</span>
+            </div>
+            <div class="grid"></div>
+            <button id="reloadPageBtn" class="grid-refresh-btn" title="Reload System to Default">REFRESH</button>
+        </div>
+
+        <!-- Analysis / Logs Section (Right Section) -->
+        <div class="analysis-section">
+            <div class="logs-header-bar">
+                <div class="logs-title">LOGS</div>
+                <button id="clearLogsBtn" class="logs-refresh-btn" title="Refresh Log Statements">REFRESH</button>
+            </div>
+            <div id="logsContainer" class="logs-container">
+                <p></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="hmi_15_script.js?v=19"></script>
+
+</body>
+
+</html>
