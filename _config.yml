@@ -1,0 +1,4 @@
+title: "IoRT AGV Swarm Path Planning"
+markdown: kramdown
+exclude:
+  - swarm_hmi_sim_rec.mp4
