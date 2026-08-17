@@ -1,0 +1,344 @@
+================================================================================
+          NEUROPATHFINDER: IOT + ML MULTI-AGENT NAVIGATION SYSTEM
+                 COMPREHENSIVE MODEL & SYSTEM ARCHITECTURE REPORT
+================================================================================
+
+TABLE OF CONTENTS:
+--------------------------------------------------------------------------------
+1. EXECUTIVE SUMMARY & PROJECT OVERVIEW
+2. END-TO-END SYSTEM ARCHITECTURE
+3. DEEP REINFORCEMENT LEARNING: PMR-DUELING DQN MODEL
+   3.1. Dueling Network Architecture (Value & Advantage Streams)
+   3.2. Double DQN (DDQN) Target Formulation
+   3.3. Prioritized Experience Replay (PER) & SumTree Implementation
+   3.4. Multi-Agent Shared Brain Concept
+   3.5. Least-Turns Optimization & High-Contention Training
+4. STATE SPACE, SENSOR MODEL & ACTION SPACE
+   4.1. 6-Dimensional Sensor State Representation
+   4.2. Action Space & Orthogonal Coordinate Mapping
+   4.3. Spatial Invariance and Generalization
+5. REWARD FUNCTION & ENVIRONMENT DYNAMICS
+   5.1. Reward Shaping Mechanics & Directional Momentum
+   5.2. Episode Lifecycle, Bottleneck Generation & Termination Conditions
+6. BACKEND INFERENCE ENGINE & ROUTING (JS_DQN.PY)
+   6.1. REST API Interface (/predict_path)
+   6.2. Neural-Guided A* Search with Least-Turns Heuristic
+7. FRONTEND HMI & ADVANCED SWARM COORDINATION (HMI_15)
+   7.1. Cyberpunk Neumorphic User Interface & 9x9 Matrix Target Selector
+   7.2. Realistic 2-Second Step Locomotion & Physical Adjacency Integrity
+   7.3. NVIC-Style Preemption Interrupt & Cascading Corridor Unblocking
+   7.4. 10-Second Dwell Service, FCFS Queueing & Pipelined Advance
+   7.5. Multi-State Color-Coded Telemetry & BOTSQUAD Typewriter Companion
+   7.6. In-Browser Standalone Resilient Router (computeLocalPath)
+8. DEPLOYMENT ARCHITECTURE & GITHUB PAGES HOSTING
+9. IOT HARDWARE INTEGRATION & EMBEDDED SWARM BRIDGING
+10. COMPLETE FILE-BY-FILE CODE BREAKDOWN
+11. SYSTEM PARAMETERS & SPECIFICATIONS SUMMARY
+
+================================================================================
+1. EXECUTIVE SUMMARY & PROJECT OVERVIEW
+================================================================================
+NeuroPathfinder is an advanced intelligent multi-agent grid navigation and swarm 
+traffic management platform engineered for Automated Guided Vehicles (AGVs), 
+Industrial Internet of Robotic Things (IoRT), and smart warehouse logistics.
+
+The system solves complex multi-agent path planning, spatial contention, and 
+deadlock challenges across a 9x9 coordinate grid (81 cells, indexed 11 to 99) 
+by unifying:
+  - Deep Reinforcement Learning (PMR-Dueling Double DQN with Prioritized Replay)
+  - Directional Momentum & Least-Turns Optimization for energy-efficient motion
+  - NVIC-Style Preemption Interrupts for real-time idle bot relocation
+  - Recursive Cascading Corridor Unblocking for dense spatial bottlenecks
+  - Pipelined Multi-Agent Advance & 10-Second Destination Dwell Service
+  - Strict Physical Adjacency (Zero diagonal/jumping moves) at 2s/step intervals
+  - Dual-mode deployment: Local Flask REST API + Standalone GitHub Pages Client
+
+Key Capabilities:
+  - 4-Agent Coordinated Swarm: Full decentralized spatial awareness.
+  - Non-Jumping Physical Realism: Step-by-step contiguous orthogonal transit.
+  - Zero Deadlocks / Anti-Collision: Preemption and standoff staging eliminate 
+    space-time conflicts.
+  - Standalone Web Execution: Built-in local router executes on static web hosts.
+
+================================================================================
+2. END-TO-END SYSTEM ARCHITECTURE
+================================================================================
+
++-----------------------------------------------------------------------------+
+|                      HUMAN-MACHINE INTERFACE (HMI)                          |
+|         (index.html / hmi_15.html, hmi_15_css.css, hmi_15_script.js)        |
+|  - 4 Bot Control Panels with 9x9 Matrix Target Dropdown Selectors           |
+|  - Real-Time 9x9 Cyberpunk Grid with Path Trails, Target Glow, and Bots     |
+|  - NVIC Swarm Coordinator (Preemption, Cascading Vacating, Pipelined Staging)|
+|  - BOTSQUAD Typewriter Companion & Formatted Single-Line Telemetry Logs      |
+|  - Standalone In-Browser Resilient Router (`computeLocalPath`) Fallback      |
++-----------------------------------------------------------------------------+
+                                      |
+                      HTTP POST /predict_path (JSON)
+           Payload: { start: "11", goal: "99", obstacles: [[r, c], ...] }
+                                      v
++-----------------------------------------------------------------------------+
+|                        FLASK REST API (JS_DQN.py)                           |
+|  - Loads PyTorch Dueling DQN weights ('pmr_dqn_model.pth')                  |
+|  - Ingests start, goal, and dynamic bot obstacle matrices                   |
+|  - Executes Neural A* Search with PMR-DQN Q-value prioritization            |
+|  - Enforces Least-Turns Heuristic (Turn Penalty = 0.35) for straight lines  |
+|  - Returns collision-free dot-delimited path string: "11.12.13.23..."       |
++-----------------------------------------------------------------------------+
+                                      |
+                          Forward Pass & Evaluation
+                                      v
++-----------------------------------------------------------------------------+
+|                   PMR-DUELING DOUBLE DQN (PMR_DQN.py)                       |
+|  - State Vector (6 floats): [DeltaX, DeltaY, ObsUp, ObsDown, ObsLeft, ObsRt]|
+|  - Shared Backbone: 2x Linear(128) + ReLU                                   |
+|  - Value Stream V(s): Linear(128) -> ReLU -> Linear(1)                      |
+|  - Advantage Stream A(s, a): Linear(128) -> ReLU -> Linear(4)              |
+|  - Q-Aggregation: Q(s, a) = V(s) + [A(s, a) - (1/|A|) * Sum_a'(A(s, a'))]   |
++-----------------------------------------------------------------------------+
+                                      ^
+                                      | Trained by
++-----------------------------------------------------------------------------+
+|                      TRAINING ENGINE (train_pmr.py)                         |
+|  - 500 Episodes with 40% High-Contention Shared Bottleneck Scenarios        |
+|  - Directional Momentum Bonus (+0.05) & Turn Penalty (-0.10) Reward Shaping |
+|  - Prioritized Experience Replay Buffer (SumTree, Capacity = 50,000)        |
+|  - Double DQN Target Estimation preventing overoptimistic Q-values          |
+|  - Saves optimized weights to `pmr_dqn_model.pth`                           |
++-----------------------------------------------------------------------------+
+
+================================================================================
+3. DEEP REINFORCEMENT LEARNING: PMR-DUELING DQN MODEL
+================================================================================
+
+3.1. Dueling Network Architecture:
+Standard DQNs estimate state-action values Q(s, a) directly. In grid navigation,
+many states have clear intrinsic values regardless of the specific action taken.
+The Dueling DQN separates feature representations into two distinct streams:
+  1. State-Value Stream V(s): A scalar representing how favorable state `s` is.
+  2. Advantage Stream A(s, a): A 4-dimensional vector representing the relative
+     benefit of each action compared to the average action.
+They are combined using the mean-subtracted identifiability equation:
+  Q(s, a) = V(s) + [ A(s, a) - (1 / |A|) * Sum_{a'} A(s, a') ]
+
+3.2. Double DQN (DDQN) Target Formulation:
+To eliminate positive maximization bias in Q-learning:
+  Y_t = R_{t+1} + gamma * Q_target( S_{t+1}, argmax_a Q_policy(S_{t+1}, a) )
+The policy network selects the greedy best action, while the target network 
+evaluates its Q-value.
+
+3.3. Prioritized Experience Replay (PER) & SumTree:
+Transitions are sampled proportionally to their Temporal Difference (TD) error:
+  P(i) = (p_i^alpha) / Sum_k (p_k^alpha), where p_i = |TD_error_i| + epsilon
+A binary `SumTree` provides O(log N) updates and sampling. Importance Sampling 
+weights (w_i) anneal beta from 0.4 to 1.0 to compensate for non-uniform sampling.
+
+3.4. Multi-Agent Shared Brain Concept:
+A single neural network acts as the centralized brain for all 4 AGVs. By passing
+localized, normalized ego-centric sensor states from each bot, 4 distinct 
+experience transitions are stored per simulation step into the shared buffer.
+
+3.5. Least-Turns Optimization & High-Contention Training:
+The environment was enhanced with:
+  - 40% probability of shared bottleneck goals to train high-pressure avoidance.
+  - Turn Penalty (-0.10) applied whenever `action != prev_action`.
+  - Straight-Line Momentum Bonus (+0.05) when maintaining direction toward goal.
+This forces the network to discover straight rectilinear routes with minimal turns.
+
+================================================================================
+4. STATE SPACE, SENSOR MODEL & ACTION SPACE
+================================================================================
+
+4.1. 6-Dimensional Sensor State:
+Rather than feeding an unscalable 81-element grid matrix, each bot perceives:
+  Index 0: DeltaX = (Goal_X - Bot_X) / 9.0  (Normalized X distance: -1.0 to 1.0)
+  Index 1: DeltaY = (Goal_Y - Bot_Y) / 9.0  (Normalized Y distance: -1.0 to 1.0)
+  Index 2: ObsUp    (1.0 if Up is Wall/Obstacle/Other Bot, 0.0 if Free)
+  Index 3: ObsDown  (1.0 if Down is Wall/Obstacle/Other Bot, 0.0 if Free)
+  Index 4: ObsLeft  (1.0 if Left is Wall/Obstacle/Other Bot, 0.0 if Free)
+  Index 5: ObsRight (1.0 if Right is Wall/Obstacle/Other Bot, 0.0 if Free)
+
+4.2. Action Space & Orthogonal Coordinate Mapping:
+  Action 0: UP    (Row - 1, Col + 0) -> Grid value - 10
+  Action 1: DOWN  (Row + 1, Col + 0) -> Grid value + 10
+  Action 2: LEFT  (Row + 0, Col - 1) -> Grid value - 1
+  Action 3: RIGHT (Row + 0, Col + 1) -> Grid value + 1
+
+4.3. Spatial Invariance:
+Because the state vector is relative to the agent's current frame and target,
+the policy generalizes perfectly across any start-goal pair on the grid.
+
+================================================================================
+5. REWARD FUNCTION & ENVIRONMENT DYNAMICS
+================================================================================
+
+5.1. Reward Shaping Mechanics:
+  - Goal Reached: +12.0
+  - Moving Closer (Manhattan distance decreased): +0.30
+  - Moving Further (Manhattan distance increased): -0.30
+  - Step Penalty: -0.05 (Encourages path efficiency)
+  - Wall / Obstacle Collision: -0.50
+  - Bot-on-Bot Crash: -3.00 (Terminates episode immediately)
+  - Turn Penalty: -0.10 (Applied when changing direction)
+  - Straight Momentum Bonus: +0.05 (Applied when maintaining straight line)
+
+5.2. Episode Lifecycle & Bottleneck Generation:
+Episodes run up to 50 steps with 5-12 random obstacles and 4 bots. In 40% of 
+episodes, bots share the same or adjacent bottleneck goals, forcing the DRL model 
+to learn tight yielding and coordination.
+
+================================================================================
+6. BACKEND INFERENCE ENGINE & ROUTING (JS_DQN.PY)
+================================================================================
+
+6.1. REST API Interface:
+Flask microservice listening on port 5000 with CORS support:
+  POST http://localhost:5000/predict_path
+  Body: { "start": "11", "goal": "99", "obstacles": [[r, c], ...] }
+  Returns: { "path": "11.12.13.23.33..." }
+
+6.2. Neural-Guided A* Search with Least-Turns Heuristic:
+`simulate_path` executes an optimized Priority Queue search where:
+  f_cost = g_cost + h_dist + dqn_preference + turn_penalty
+  - `g_cost`: Exact step distance from start.
+  - `h_dist`: Manhattan distance to goal.
+  - `dqn_preference`: -0.25 * Q_value(action) (DQN prioritizes high-value actions).
+  - `turn_penalty`: +0.35 if action != prev_action (Penalizes direction changes).
+Guarantees strictly orthogonal, shortest, least-turn, collision-free paths.
+
+================================================================================
+7. FRONTEND HMI & ADVANCED SWARM COORDINATION (HMI_15)
+================================================================================
+
+7.1. Cyberpunk Neumorphic UI & 9x9 Matrix Target Selector:
+  - Sci-Fi dark theme with Orbitron typography and neon cyan/lime/red/yellow glow.
+  - 9x9 Interactive Matrix Dropdown Picker for each bot (`matrixPicker1` to `4`):
+    Clicking `TGT: [Val]` opens a full visual 9x9 grid to select target coordinates.
+  - Real-time path trail rendering with dashed neon borders and target glow.
+
+7.2. Realistic 2-Second Step Locomotion & Physical Adjacency Integrity:
+  - `STEP_INTERVAL_MS = 2000`: Every adjacent step transition takes 2 full seconds.
+  - Physical Adjacency Assertion: Enforces `|dr| + |dc| === 1`.
+  - Zero Teleportation: A bot NEVER force-assigns its position to the target.
+
+7.3. NVIC-Style Preemption Interrupt & Cascading Corridor Unblocking:
+  - When Bot A targets a cell occupied by an **idle/parked bot** (Bot B):
+    Bot B triggers an **NVIC Preemption Interrupt (`Vacating / Interrupt`)** and
+    moves 1 orthogonal step to an adjacent safe cell (`findSafeAdjacentCell`).
+  - **Cascading Unblocking**: If all 4 immediate neighbors of Bot B are also 
+    occupied by other idle bots (e.g. Bot C), the coordinator triggers a chain 
+    vacate: Bot C vacates into open space, allowing Bot B to step into Bot C's 
+    former spot, completely opening the corridor for Bot A without deadlocks.
+
+7.4. 10-Second Dwell Service, FCFS Queueing & Pipelined Advance:
+  - When an AGV reaches its goal, it locks the tile for a 10-second dwell period 
+    (`Goal (10s) ... Goal (1s)`).
+  - If another bot targets the dwelling cell, it enters **Pipelined Advance**: 
+    it travels immediately across the grid and stages at the border cell (`Staging / Queued`), 
+    eliminating stationary idle delay.
+  - **Strict Claimant Authorization Gate**: Only the active head of the FCFS 
+    queue (`targetClaims[targetVal].activeBotId === botId`) enters the target 
+    after dwell completion and vacating. Other staging bots stay safely waiting.
+
+7.5. Multi-State Color-Coded Telemetry & BOTSQUAD Companion:
+  - LED Status Displays:
+    * Running / Dwelling / Goal: Green Glow (#00ff66)
+    * Queued / Approaching / Staging / Yielding: Yellow Glow (#ffff00)
+    * Vacating: Orange Glow (#ff9900)
+    * Interrupted / Preempted / Blocked / Stopped: Red Glow (#ff3e3e)
+    * Idle / Parked / Reached / Normal: Cyan Glow (#a4f3f2)
+  - Typewriter BOTSQUAD Companion: Dynamic contextual messages and status updates.
+
+7.6. In-Browser Standalone Resilient Router (`computeLocalPath`):
+`hmi_15_script.js` contains a built-in client-side router executing strict BFS 
+obstacle avoidance and least-turn heuristics, allowing complete standalone 
+execution on static hosting platforms without a Python backend.
+
+================================================================================
+8. DEPLOYMENT ARCHITECTURE & GITHUB PAGES HOSTING
+================================================================================
+The project supports zero-configuration static web hosting:
+  - Main URL: https://titas8100.github.io/ML-driven_Multi-Agent_Path_Planning_of_IoRT-based_AGV_Swarm/
+  - Static Entrypoint: `index.html`
+  - GitHub Pages Configuration: `.nojekyll` and `_config.yml`
+  - Automated CI/CD Pipeline: `.github/workflows/pages.yml` (Deploys `main` / `gh-pages`).
+
+================================================================================
+9. IOT HARDWARE INTEGRATION & EMBEDDED SWARM BRIDGING
+================================================================================
+1. Physical AGV Nodes:
+   - Differential-drive chassis with ESP32 or Raspberry Pi Pico W.
+   - Proximity sensors (VL53L0X ToF / Ultrasonic) feeding 4-way obstacle flags.
+   - Localization via wheel encoders and ArUco overhead optical tracking.
+2. Communications Bridge:
+   - WebSocket / MQTT interface streaming coordinates and receiving waypoint sequences.
+3. Closed-Loop Execution:
+   - PID motion control on dual DC motors stepping 1 grid cell per interval.
+
+================================================================================
+10. COMPLETE FILE-BY-FILE CODE BREAKDOWN
+================================================================================
+
+File: models/PMR_DQN.py
+  - `SumTree`: Binary tree storing transition priorities for O(log N) sampling.
+  - `PrioritizedReplayBuffer`: PER buffer with stratified Importance Sampling.
+  - `DuelingDQN`: Neural network with dual Value V(s) and Advantage A(s, a) streams.
+
+File: models/train_pmr.py
+  - `GridEnvironment`: Multi-agent 9x9 simulation with 40% bottleneck generation,
+    turn penalty (-0.10), and directional momentum bonus (+0.05).
+  - `train()`: Double DQN training loop over 500 episodes saving `pmr_dqn_model.pth`.
+
+File: models/JS_DQN.py
+  - Flask REST server on port 5000 with CORS.
+  - `simulate_path()`: Priority Queue Neural A* with Least-Turns Heuristic.
+  - `/predict_path`: HTTP endpoint returning collision-free routes.
+
+File: index.html & hmi_15.html
+  - Responsive Cyberpunk UI, 4 Bot panels, 9x9 Matrix Target Selectors, Grid, Logs.
+
+File: hmi_15_css.css
+  - Neumorphic sci-fi styling, matrix dropdowns, animated glow LED status buttons.
+
+File: hmi_15_script.js
+  - Complete Swarm Coordinator: NVIC preemption, cascading vacating, FCFS dwell,
+    pipelined advance, 2s step timer, and client-side `computeLocalPath` engine.
+
+File: .github/workflows/pages.yml & _config.yml & .nojekyll
+  - Automated GitHub Actions deployment to GitHub Pages.
+
+================================================================================
+11. SYSTEM PARAMETERS & SPECIFICATIONS SUMMARY
+================================================================================
+
+Parameter                         | Value / Configuration
+----------------------------------+---------------------------------------------
+Grid Dimensions                   | 9 x 9 (81 Cells, indexed 11 to 99)
+Number of Active Swarm Bots       | 4 Bots (Default positions: 11, 19, 91, 99)
+Step Locomotion Interval          | 2000 ms (2.0 Seconds per Adjacent Move)
+Movement Adjacency                | Strict 4-Connected Orthogonal (Up, Down, Left, Right)
+Destination Dwell Service Time    | 10 Seconds (`Goal (10s)` countdown)
+Model Input State Size            | 6 Floats [DeltaX, DeltaY, U, D, L, R]
+Action Space                      | 4 Discrete Directions (Up, Down, Left, Right)
+Hidden Layer Backbone             | 2x Linear(128) + ReLU Shared Layers
+Value Stream Architecture         | Linear(128) -> ReLU -> Linear(1)
+Advantage Stream Architecture     | Linear(128) -> ReLU -> Linear(4)
+Q-Value Combination               | Q(s,a) = V(s) + (A(s,a) - mean(A(s,:)))
+Turn Minimization Penalty         | -0.10 (Training) / +0.35 Heuristic (Inference)
+Straight Momentum Bonus           | +0.05 (Training)
+Experience Replay Type            | Prioritized Experience Replay (SumTree)
+Replay Buffer Capacity            | 50,000 Transitions
+PER Priority Exponent (alpha)     | 0.6
+Importance Sampling (beta)        | Annealed from 0.4 to 1.0 (+0.001 / episode)
+Target Network Update Interval    | Every 10 Episodes (Hard Copy)
+Optimizer                         | Adam (Learning Rate = 1e-4)
+Discount Factor (gamma)           | 0.99
+Epsilon Exploration Schedule      | 1.0 -> 0.05 (Decay Rate = 0.992 / episode)
+Training Episodes                 | 500 Episodes (Shared Replay: 4 transitions/step)
+Max Steps per Simulation          | 50 Steps
+Backend REST Server               | Flask on Python (Port 5000) with Flask-CORS
+Frontend Framework                | Vanilla ES6 JavaScript, HTML5, Neumorphic CSS3
+Live Web Deployment               | GitHub Pages (Static Standalone Client)
+================================================================================
+                               END OF REPORT
+================================================================================
